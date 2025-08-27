@@ -5,7 +5,7 @@ import { ZenAIAssistant } from './components/zenshop/ZenAIAssistant';
 import { InvoiceDashboard } from './components/screens/InvoiceDashboard';
 import { InvoiceList } from './components/screens/InvoiceList';
 import { InvoiceDetail } from './components/screens/InvoiceDetail';
-import { BuyQuota } from './components/screens/BuyQuota';
+import { ResourceCenterPage } from './components/screens/ResourceCenterPage';
 import { Settings } from './components/screens/Settings';
 import { Logs } from './components/screens/Logs';
 
@@ -84,7 +84,7 @@ export default function App() {
 
     switch (currentView) {
       case 'dashboard':
-        return <InvoiceDashboard onCreateInvoice={handleOpenInvoiceWizard} />;
+        return <InvoiceDashboard onCreateInvoice={handleOpenInvoiceWizard} onNavigate={handleNavigate} />;
       case 'invoices':
         return (
           <InvoiceList 
@@ -93,7 +93,7 @@ export default function App() {
           />
         );
       case 'quota':
-        return <BuyQuota />;
+        return <ResourceCenterPage onNavigate={handleNavigate} />;
       case 'settings':
         return <Settings />;
       case 'logs':

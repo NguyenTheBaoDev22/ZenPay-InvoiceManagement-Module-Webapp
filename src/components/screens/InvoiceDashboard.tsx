@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ZenKPITile } from '../zenshop/ZenKPITile';
 import { ZenBarChart } from '../zenshop/ZenCharts';
 import { ZenAlertCenter } from '../zenshop/ZenAlertCenter';
@@ -22,13 +22,13 @@ import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
 
 
+
 interface InvoiceDashboardProps {
   onCreateInvoice?: () => void;
+  onNavigate?: (view: string) => void;
 }
 
-export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvoice }) => {
-  // State for quota management
-  const [showResourceCenter, setShowResourceCenter] = useState(false);
+export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvoice, onNavigate }) => {
 
   // Mock quota status - low quota to trigger purchase flow
   const quotaUsed = 2847;
@@ -121,6 +121,12 @@ export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvo
     );
   };
 
+  const handleNavigateToResourceCenter = () => {
+    if (onNavigate) {
+      onNavigate('quota');
+    }
+  };
+
   // Mock data for alerts
   const alerts = [
     {
@@ -176,7 +182,7 @@ export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvo
             </span>
             <Button
               size="sm"
-              onClick={() => setShowResourceCenter(true)}
+              onClick={handleNavigateToResourceCenter}
               className="bg-primary hover:bg-primary/90 ml-4"
             >
               <ShoppingCart className="h-4 w-4 mr-1" />
@@ -317,7 +323,7 @@ export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvo
                   variant="outline"
                   size="sm"
                   className="w-full"
-                  onClick={() => setShowResourceCenter(true)}
+                  onClick={handleNavigateToResourceCenter}
                 >
                   <ShoppingCart className="h-4 w-4 mr-2" />
                   Mua thêm quota
@@ -327,6 +333,8 @@ export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvo
           </Card>
         </div>
       </div>
+
+
     </div>
   );
 };
