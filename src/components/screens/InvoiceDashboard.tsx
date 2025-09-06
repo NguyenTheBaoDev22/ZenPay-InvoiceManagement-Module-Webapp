@@ -20,6 +20,16 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
+import { useDashboardData } from '../../presentation/hooks/useDashboardData';
+import { useAuth } from '../../presentation/hooks/useAuth';
+import {
+  KPITileLoading,
+  ChartLoading,
+  RecentInvoicesLoading,
+  QuotaStatusLoading,
+  SectionLoading,
+  LoadingSpinner
+} from '../ui/loading';
 
 
 
@@ -28,89 +38,119 @@ interface InvoiceDashboardProps {
   onNavigate?: (view: string) => void;
 }
 
-export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvoice, onNavigate }) => {
+export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onNavigate }) => {
+  // Get taxCode from auth, similar to InvoiceList
+  const { taxCode } = useAuth();
 
-  // Mock quota status - low quota to trigger purchase flow
-  const quotaUsed = 2847;
-  const quotaTotal = 3000;
-  const quotaPercentage = (quotaUsed / quotaTotal) * 100;
-  const quotaRemaining = quotaTotal - quotaUsed;
-  const isQuotaLow = quotaPercentage > 90;
+  // Use taxCode from auth, fallback to test value for development
+  const effectiveTaxCode = taxCode || '0123456789'; // Fallback for development
+  const merchantBranchId = 'eb7be434-7e2c-4f0b-a7f6-cdb73970a912'; // Test GUID - replace with actual merchant branch ID
 
-  // Mock data for KPI tiles
-  const kpiData = [
+  // Use dashboard data hook with taxCode
+  const { data, loading, error, refetch, resendInvoice } = useDashboardData(merchantBranchId, effectiveTaxCode);
+
+  // Transform API data to component format
+  const kpiData = data.kpi ? [
     {
       title: 'Invoices Today',
-      value: '24',
-      change: { value: '12%', type: 'increase' as const },
+      value: data.kpi.invoicesToday.value,
+      change: data.kpi.invoicesToday.change,
       icon: FileTextIcon,
     },
     {
       title: 'Success Rate',
-      value: '94.2%',
-      change: { value: '2.1%', type: 'increase' as const },
+      value: data.kpi.successRate.value,
+      change: data.kpi.successRate.change,
       icon: TrendingUpIcon,
     },
     {
       title: 'Quota Remaining',
-      value: '1,456',
-      change: { value: '156', type: 'decrease' as const },
+      value: data.kpi.quotaRemaining.value,
+      change: data.kpi.quotaRemaining.change,
       icon: TargetIcon,
     },
     {
       title: 'Certificate Expiry',
-      value: '45 days',
-      change: { value: '15 days', type: 'neutral' as const },
+      value: data.kpi.certificateExpiry.value,
+      change: data.kpi.certificateExpiry.change,
       icon: ShieldCheckIcon,
     },
-  ];
+  ] : [];
 
-  // Mock data for bar chart
-  const invoicesByDay = [
-    { name: 'Mon', value: 12 },
-    { name: 'Tue', value: 19 },
-    { name: 'Wed', value: 15 },
-    { name: 'Thu', value: 22 },
-    { name: 'Fri', value: 28 },
-    { name: 'Sat', value: 8 },
-    { name: 'Sun', value: 5 },
-  ];
+  // Chart data from API
+  const invoicesByDay = data.charts || [];
 
+  // Recent invoices from API - handle different response structures
+  const recentInvoices = (() => {
+    if (!data.recentInvoices) return [];
+    if (Array.isArray(data.recentInvoices)) return data.recentInvoices;
+    // Handle nested data structure from ZenInvoice API response
+    const apiData = data.recentInvoices as any;
+    const invoiceList = apiData?.data?.data || apiData?.data || [];
 
+    // Map ZenInvoice API data to dashboard format
+    return invoiceList.map((invoice: any) => ({
+      id: invoice.invoiceId || invoice.id,
+      customer: invoice.customerName || 'N/A',
+      date: invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('vi-VN') : 'N/A',
+      amount: invoice.totalAmount ? `${invoice.totalAmount.toLocaleString('vi-VN')} VND` : '0 VND',
+      status: invoice.invoiceStatus || 'unknown',
+      canResend: true // Default to true for now
+    }));
+  })();
 
-  // Mock data for recent invoices
-  const recentInvoices = [
-    {
-      id: 'INV-2025-000123',
-      customer: 'Công ty ABC',
-      amount: '₫23,089,000',
-      status: 'paid',
-      date: '24/08/2025'
-    },
-    {
-      id: 'INV-2025-000124',
-      customer: 'Công ty XYZ',
-      amount: '₫15,500,000',
-      status: 'pending',
-      date: '24/08/2025'
-    },
-    {
-      id: 'INV-2025-000125',
-      customer: 'Doanh nghiệp DEF',
-      amount: '₫8,750,000',
-      status: 'overdue',
-      date: '22/08/2025'
-    }
-  ];
+  // Quota data from API
+  const quotaData = data.quotaStatus;
+  const quotaUsed = quotaData?.quotaUsed || 0;
+  const quotaTotal = quotaData?.quotaTotal || 0;
+  const quotaPercentage = quotaData?.quotaPercentage || 0;
+  const quotaRemaining = quotaData?.quotaRemaining || 0;
+  const isQuotaLow = quotaData?.isQuotaLow || false;
 
   const getStatusBadge = (status: string) => {
+    // Map various status types to dashboard display status
+    const statusMapping: Record<string, string> = {
+      // Payment/Order status
+      'Completed': 'paid',
+      'Delivered': 'paid',
+      'COMPLETED': 'paid',
+      'Signed': 'paid',
+      'CodeAssigned': 'paid',
+
+      // Pending status
+      'Pending': 'pending',
+      'PENDING': 'pending',
+      'WaitingConfirmation': 'pending',
+      'Confirmed': 'pending',
+      'Preparing': 'pending',
+      'Shipping': 'pending',
+      'PendingSignature': 'pending',
+      'PendingCodeAssignment': 'pending',
+      'PendingResponse': 'pending',
+      'Original': 'pending',
+
+      // Overdue/Problem status
+      'Cancelled': 'overdue',
+      'FailedDelivery': 'overdue',
+      'InvalidFormat': 'overdue',
+      'CodeNotAssigned': 'overdue',
+      'NotAccepted': 'overdue',
+      'TbssRejected': 'overdue',
+
+      // Default fallback
+      'unknown': 'unknown'
+    };
+
     const variants = {
       paid: { variant: 'default', icon: CheckCircle, label: 'Đã thanh toán' },
       pending: { variant: 'secondary', icon: Clock, label: 'Chờ thanh toán' },
-      overdue: { variant: 'destructive', icon: XCircle, label: 'Quá hạn' }
+      overdue: { variant: 'destructive', icon: XCircle, label: 'Quá hạn' },
+      unknown: { variant: 'outline', icon: Clock, label: 'Không xác định' }
     };
 
-    const config = variants[status as keyof typeof variants];
+    // Map the status to display status, fallback to unknown
+    const displayStatus = statusMapping[status] || 'unknown';
+    const config = variants[displayStatus as keyof typeof variants];
     const IconComponent = config.icon;
 
     return (
@@ -124,6 +164,17 @@ export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvo
   const handleNavigateToResourceCenter = () => {
     if (onNavigate) {
       onNavigate('quota');
+    }
+  };
+
+  const handleResendInvoice = async (invoiceId: string) => {
+    const success = await resendInvoice(invoiceId);
+    if (success) {
+      // Could show success toast here
+      console.log(`Invoice ${invoiceId} resent successfully`);
+    } else {
+      // Could show error toast here
+      console.error(`Failed to resend invoice ${invoiceId}`);
     }
   };
 
@@ -171,92 +222,164 @@ export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvo
         <p className="text-[#6B7280] mt-1">Monitor your e-invoice performance and system status</p>
       </div>
 
-      {/* Low Quota Alert */}
-      {isQuotaLow && (
-        <Alert className="border-amber-200 bg-amber-50">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
+      {/* Low Quota Alert - Always show to encourage quota purchase */}
+      <SectionLoading
+        isLoading={loading.quotaStatus}
+        error={null} // Don't show error for this promotional alert
+        onRetry={refetch.quotaStatus}
+        loadingComponent={
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="flex items-center justify-between">
+              <span className="text-amber-800">
+                <strong>Đang tải thông tin quota...</strong>
+              </span>
+              <Button
+                size="sm"
+                disabled
+                className="bg-primary hover:bg-primary/90 ml-4"
+              >
+                <ShoppingCart className="h-4 w-4 mr-1" />
+                Mua ngay
+              </Button>
+            </AlertDescription>
+          </Alert>
+        }
+      >
+        <Alert className={`border-amber-200 bg-amber-50 ${isQuotaLow ? 'border-red-200 bg-red-50' : ''}`}>
+          <AlertTriangle className={`h-4 w-4 ${isQuotaLow ? 'text-red-600' : 'text-amber-600'}`} />
           <AlertDescription className="flex items-center justify-between">
-            <span className="text-amber-800">
-              <strong>Quota sắp hết!</strong> Bạn chỉ còn {quotaRemaining} hóa đơn.
-              Mua thêm quota để không bị gián đoạn dịch vụ.
+            <span className={`${isQuotaLow ? 'text-red-800' : 'text-amber-800'}`}>
+              {isQuotaLow ? (
+                <>
+                  <strong>Quota sắp hết!</strong> Bạn chỉ còn {quotaRemaining.toLocaleString()} hóa đơn.
+                  Mua thêm quota để không bị gián đoạn dịch vụ.
+                </>
+              ) : (
+                <>
+                  <strong>Tối ưu hóa chi phí!</strong> Bạn còn {quotaRemaining.toLocaleString()} hóa đơn.
+                  Mua thêm quota với giá ưu đãi để tiết kiệm hơn.
+                </>
+              )}
             </span>
             <Button
               size="sm"
               onClick={handleNavigateToResourceCenter}
-              className="bg-primary hover:bg-primary/90 ml-4"
+              className={`ml-4 ${isQuotaLow ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'}`}
             >
               <ShoppingCart className="h-4 w-4 mr-1" />
-              Mua ngay
+              {isQuotaLow ? 'Mua ngay' : 'Mua thêm'}
             </Button>
           </AlertDescription>
         </Alert>
-      )}
+      </SectionLoading>
 
       {/* KPI Tiles */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {kpiData.map((kpi, index) => (
-          <ZenKPITile
-            key={index}
-            title={kpi.title}
-            value={kpi.value}
-            change={kpi.change}
-            icon={kpi.icon}
-          />
-        ))}
+        <SectionLoading
+          isLoading={loading.kpi}
+          error={error.kpi}
+          onRetry={refetch.kpi}
+          loadingComponent={
+            <>
+              <KPITileLoading />
+              <KPITileLoading />
+              <KPITileLoading />
+              <KPITileLoading />
+            </>
+          }
+        >
+          {kpiData.map((kpi, index) => (
+            <ZenKPITile
+              key={index}
+              title={kpi.title}
+              value={kpi.value}
+              change={kpi.change}
+              icon={kpi.icon}
+            />
+          ))}
+        </SectionLoading>
       </div>
 
       {/* Charts and Alerts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Bar Chart - Invoices by Day */}
-        <ZenBarChart
-          data={invoicesByDay}
-          title="Invoices by Day"
-          className="lg:col-span-2"
-        />
+        <SectionLoading
+          isLoading={loading.charts}
+          error={error.charts}
+          onRetry={refetch.charts}
+          loadingComponent={<ChartLoading />}
+        >
+          <ZenBarChart
+            data={invoicesByDay}
+            title="Invoices by Day"
+            className="lg:col-span-2"
+          />
+        </SectionLoading>
 
-        {/* Alerts Center */}
+        {/* Alerts Center - Keep mock data as requested */}
         <ZenAlertCenter alerts={alerts} />
       </div>
 
       {/* Recent Invoices and AI/Quota Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Invoices */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Hóa đơn gần đây</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentInvoices.map((invoice) => (
-                <div
-                  key={invoice.id}
-                  className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium">{invoice.id}</span>
-                      {getStatusBadge(invoice.status)}
+        <SectionLoading
+          isLoading={loading.recentInvoices}
+          error={error.recentInvoices}
+          onRetry={refetch.recentInvoices}
+          loadingComponent={<RecentInvoicesLoading />}
+        >
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Hóa đơn gần đây</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {recentInvoices.map((invoice) => (
+                  <div
+                    key={invoice.id}
+                    className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium">{invoice.id}</span>
+                        {getStatusBadge(invoice.status)}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {invoice.customer} • {invoice.date}
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {invoice.customer} • {invoice.date}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">{invoice.amount}</p>
-                    <div className="flex gap-1 mt-1">
-                      <Button variant="ghost" size="sm">
-                        <Send className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Download className="h-3 w-3" />
-                      </Button>
+                    <div className="text-right">
+                      <p className="font-medium">{invoice.amount}</p>
+                      <div className="flex gap-1 mt-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={!invoice.canResend || loading.resendingInvoice === invoice.id}
+                          onClick={() => handleResendInvoice(invoice.id)}
+                        >
+                          {loading.resendingInvoice === invoice.id ? (
+                            <LoadingSpinner size="sm" />
+                          ) : (
+                            <Send className="h-3 w-3" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={!invoice.canDownload}
+                        >
+                          <Download className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </SectionLoading>
 
         {/* Quick Actions & AI */}
         <div className="space-y-6">
@@ -298,39 +421,46 @@ export const InvoiceDashboard: React.FC<InvoiceDashboardProps> = ({ onCreateInvo
           </Card>
 
           {/* Quota Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quota sử dụng</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Hóa đơn đã sử dụng</span>
-                    <span>{quotaUsed.toLocaleString()} / {quotaTotal.toLocaleString()}</span>
+          <SectionLoading
+            isLoading={loading.quotaStatus}
+            error={error.quotaStatus}
+            onRetry={refetch.quotaStatus}
+            loadingComponent={<QuotaStatusLoading />}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>Quota sử dụng</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>Hóa đơn đã sử dụng</span>
+                      <span>{quotaUsed.toLocaleString()} / {quotaTotal.toLocaleString()}</span>
+                    </div>
+                    <Progress
+                      value={quotaPercentage}
+                      className={`h-2 ${isQuotaLow ? '[&>div]:bg-amber-500' : ''}`}
+                    />
                   </div>
-                  <Progress
-                    value={quotaPercentage}
-                    className={`h-2 ${isQuotaLow ? '[&>div]:bg-amber-500' : ''}`}
-                  />
-                </div>
 
-                <div className="text-xs text-muted-foreground">
-                  Còn lại {quotaRemaining.toLocaleString()} hóa đơn trong tháng này
-                </div>
+                  <div className="text-xs text-muted-foreground">
+                    Còn lại {quotaRemaining.toLocaleString()} hóa đơn trong {quotaData?.currentPeriod || 'tháng này'}
+                  </div>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={handleNavigateToResourceCenter}
-                >
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  Mua thêm quota
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={handleNavigateToResourceCenter}
+                  >
+                    <ShoppingCart className="h-4 w-4 mr-2" />
+                    Mua thêm quota
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </SectionLoading>
         </div>
       </div>
 

@@ -1,15 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from '../ui/utils';
-import { 
+import {
   BarChart3Icon,
-  FileTextIcon, 
+  FileTextIcon,
   CreditCardIcon,
-  SettingsIcon, 
+  SettingsIcon,
   DatabaseIcon,
   HelpCircleIcon,
   BellIcon,
-  UserIcon
+  UserIcon,
+  LogOutIcon,
+  ChevronDownIcon
 } from 'lucide-react';
+import { useAuth } from '../../presentation/hooks/useAuth';
 
 interface NavigationItem {
   id: string;
@@ -29,14 +32,23 @@ export const ZenNavigation: React.FC<ZenNavigationProps> = ({
   onNavigate,
   className,
 }) => {
+  const { username, taxCode, logout } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
   const navigationItems: NavigationItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3Icon },
-    { id: 'invoices', label: 'Invoices', icon: FileTextIcon, badge: 3 },
-    { id: 'quota', label: 'Buy Quota', icon: CreditCardIcon },
-    { id: 'settings', label: 'Settings', icon: SettingsIcon },
+    { id: 'invoices', label: 'Quản lý hoá đơn', icon: FileTextIcon, badge: 3 },
+    { id: 'quota', label: 'Mua hạn mức', icon: CreditCardIcon },
+    { id: 'quotas', label: 'Nhật ký hạn mức', icon: DatabaseIcon },
+    { id: 'settings', label: 'Cấu hình', icon: SettingsIcon },
     { id: 'logs', label: 'Logs', icon: DatabaseIcon },
     { id: 'help', label: 'Help', icon: HelpCircleIcon },
   ];
+
+  const handleLogout = () => {
+    logout();
+    setShowUserMenu(false);
+  };
 
   return (
     <nav className={cn('bg-white border-b border-[#E5E7EB]', className)}>
@@ -90,11 +102,43 @@ export const ZenNavigation: React.FC<ZenNavigationProps> = ({
               <BellIcon className="h-5 w-5" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-[#EF4444] rounded-full"></span>
             </button>
-            
-            <button className="flex items-center gap-2 p-2 text-[#6B7280] hover:text-[#374151] hover:bg-[#F9FAFB] rounded-lg transition-colors">
-              <UserIcon className="h-5 w-5" />
-              <span className="text-sm font-medium">John Doe</span>
-            </button>
+
+            {/* User Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 p-2 text-[#6B7280] hover:text-[#374151] hover:bg-[#F9FAFB] rounded-lg transition-colors"
+              >
+                <UserIcon className="h-5 w-5" />
+                <div className="text-left">
+                  <div className="text-sm font-medium">{username || 'User'}</div>
+                  {taxCode && (
+                    <div className="text-xs text-[#9CA3AF]">MST: {taxCode}</div>
+                  )}
+                </div>
+                <ChevronDownIcon className="h-4 w-4" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-50">
+                  <div className="px-4 py-2 border-b border-[#E5E7EB]">
+                    <div className="text-sm font-medium text-[#1F2937]">{username}</div>
+                    {taxCode && (
+                      <div className="text-xs text-[#6B7280]">Mã số thuế: {taxCode}</div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#6B7280] hover:text-[#EF4444] hover:bg-[#FEF2F2] transition-colors"
+                  >
+                    <LogOutIcon className="h-4 w-4" />
+                    Đăng xuất
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

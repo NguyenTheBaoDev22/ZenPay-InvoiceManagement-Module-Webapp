@@ -3,7 +3,10 @@ import { ZenButton } from '../zenshop/ZenButton';
 import { ZenStatusChip } from '../zenshop/ZenStatusChip';
 import { ZenTimeline } from '../zenshop/ZenTimeline';
 import { ZenCodeViewer } from '../zenshop/ZenCodeViewer';
-import { 
+import { PDFPreview } from '../invoice/PDFPreview';
+import { InvoiceListItem } from '../../core/entities/Invoice';
+import { useInvoiceStatusMapping } from '../../presentation/hooks/useInvoiceList';
+import {
   ArrowLeftIcon,
   DownloadIcon,
   SendIcon,
@@ -19,32 +22,46 @@ import {
   CalendarIcon
 } from 'lucide-react';
 
-export const InvoiceDetail: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'json' | 'xml'>('details');
+interface InvoiceDetailProps {
+  invoice: InvoiceListItem;
+  onBack: () => void;
+}
 
-  // Mock invoice data
+export const InvoiceDetail: React.FC<InvoiceDetailProps> = ({ invoice, onBack }) => {
+  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'json' | 'xml'>('details');
+  const { mapStatus, formatCurrency, formatDate } = useInvoiceStatusMapping();
+
+  // Format invoice data from API response
   const invoiceData = {
-    id: 'INV-2024-001',
-    status: 'paid',
+    id: invoice.invoiceNumber || invoice.invoiceId || invoice.id,
+    status: mapStatus(invoice.invoiceStatus),
     customer: {
-      name: 'Acme Corporation',
-      email: 'billing@acmecorp.com',
-      address: '123 Business St, Suite 100, New York, NY 10001',
-      taxId: 'US123456789',
+      name: invoice.customerName || 'N/A',
+      email: 'N/A', // Not available in current API response
+      address: 'N/A', // Not available in current API response
+      taxId: invoice.customerTaxCode || 'N/A',
     },
-    amount: '$2,500.00',
-    issueDate: '2024-01-15',
-    dueDate: '2024-02-14',
-    series: 'A',
-    currency: 'USD',
+    amount: formatCurrency(invoice.totalAmount),
+    issueDate: formatDate(invoice.invoiceDate),
+    dueDate: 'N/A', // Not available in current API response
+    series: invoice.invoiceSeries || 'N/A',
+    currency: 'VND', // Assuming VND based on API response
     lineItems: [
-      { description: 'Web Development Services', quantity: 1, rate: '$2,000.00', amount: '$2,000.00' },
-      { description: 'Domain Registration (1 year)', quantity: 1, rate: '$25.00', amount: '$25.00' },
-      { description: 'SSL Certificate', quantity: 1, rate: '$100.00', amount: '$100.00' },
+      // Line items not available in current API response
+      // Will be populated when detailed invoice API is implemented
     ],
-    subtotal: '$2,125.00',
-    tax: '$375.00',
-    total: '$2,500.00',
+    subtotal: formatCurrency((invoice.totalAmount || 0) - (invoice.taxAmount || 0)),
+    tax: formatCurrency(invoice.taxAmount),
+    total: formatCurrency(invoice.totalAmount),
+    // Additional fields from API
+    signedDate: formatDate(invoice.signedDate),
+    sentToCqtDate: formatDate(invoice.sentToCqtDate),
+    errorMessage: invoice.errorMessage,
+    notes: invoice.notes,
+    createdAt: formatDate(invoice.createdAt),
+    updatedAt: formatDate(invoice.updatedAt),
+    merchantBranchName: invoice.merchantBranchName,
+    merchantInvoiceOrder: invoice.merchantInvoiceOrder,
   };
 
   // Mock timeline data
@@ -196,18 +213,11 @@ export const InvoiceDetail: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel - PDF Preview */}
-        <div className="flex-1 bg-white border-r border-[#E5E7EB] p-8">
-          <div className="h-full bg-[#F8FAFC] border border-[#E5E7EB] rounded-lg flex items-center justify-center">
-            <div className="text-center">
-              <FileTextIcon className="h-16 w-16 text-[#6B7280] mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-[#1F2937] mb-2">PDF Preview</h3>
-              <p className="text-[#6B7280] mb-4">Invoice PDF would be rendered here</p>
-              <ZenButton variant="secondary">
-                <DownloadIcon className="h-4 w-4" />
-                Download PDF
-              </ZenButton>
-            </div>
-          </div>
+        <div className="flex-1 bg-white border-r border-[#E5E7EB]">
+          <PDFPreview
+            invoiceId={invoice.invoiceId}
+            taxCode={invoice.taxCode}
+          />
         </div>
 
         {/* Right Panel - Tabbed Interface */}

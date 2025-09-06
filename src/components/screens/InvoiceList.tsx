@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ZenButton } from '../zenshop/ZenButton';
 import { ZenSearchField } from '../zenshop/ZenSearchField';
 import { ZenDateRangePicker } from '../zenshop/ZenFormInputs';
@@ -6,27 +6,52 @@ import { ZenDataGrid, ZenColumn } from '../zenshop/ZenDataGrid';
 import { ZenDrawer } from '../zenshop/ZenModal';
 import { ZenStatusChip } from '../zenshop/ZenStatusChip';
 import { ZenSelect, ZenInput } from '../zenshop/ZenFormInputs';
-import { 
-  FilterIcon, 
-  PlusIcon, 
-  DownloadIcon, 
-  TrashIcon, 
+import { useInvoiceList, useInvoiceStatusMapping } from '../../presentation/hooks/useInvoiceList';
+import { InvoiceListRequest, InvoiceListItem } from '../../core/entities/Invoice';
+import { useAuth } from '../../presentation/hooks/useAuth';
+import {
+  FilterIcon,
+  PlusIcon,
+  DownloadIcon,
+  TrashIcon,
   MoreHorizontalIcon,
   EyeIcon,
   EditIcon,
-  SendIcon
+  SendIcon,
+  LoaderIcon
 } from 'lucide-react';
 
-export const InvoiceList: React.FC<{ 
-  onViewInvoice?: () => void;
+export const InvoiceList: React.FC<{
+  onViewInvoice?: (invoice: InvoiceListItem) => void;
   onCreateInvoice?: () => void;
 }> = ({ onViewInvoice, onCreateInvoice }) => {
+  const { taxCode } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
-  const [sortField, setSortField] = useState<string>('');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortField, setSortField] = useState<string>('createdAt');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+
+  // Use taxCode from auth, fallback to test value for development
+  const effectiveTaxCode = taxCode || '0123456789'; // Fallback for development
+  const merchantBranchId = 'eb7be434-7e2c-4f0b-a7f6-cdb73970a912'; // Test GUID - replace with actual merchant branch ID
+
+  // API parameters
+  const apiParams: InvoiceListRequest = useMemo(() => ({
+    pageIndex: currentPage,
+    pageSize,
+    taxCode: effectiveTaxCode,
+    merchantBranchId,
+    searchTerm: searchQuery || undefined,
+    sortBy: sortField,
+    sortDescending: sortDirection === 'desc',
+  }), [currentPage, pageSize, searchQuery, sortField, sortDirection, effectiveTaxCode]);
+
+  // API call
+  const { data: apiResponse, isLoading, error, refetch } = useInvoiceList(apiParams);
+  const { mapStatus, formatCurrency, formatDate } = useInvoiceStatusMapping();
 
   // ActionDropdown component defined first
   const ActionDropdown = ({ invoiceId }: { invoiceId: string }) => {
@@ -78,79 +103,36 @@ export const InvoiceList: React.FC<{
     );
   };
 
-  // Mock data for DataGrid
+  // Transform API data for DataGrid
   const columns: ZenColumn[] = [
-    { key: 'invoice', label: 'Invoice #', sortable: true, width: '140px' },
-    { key: 'customer', label: 'Customer', sortable: true },
-    { key: 'amount', label: 'Amount', sortable: true, align: 'right', width: '120px' },
-    { key: 'status', label: 'Status', width: '100px', align: 'center' },
-    { key: 'date', label: 'Date', sortable: true, width: '120px' },
-    { key: 'series', label: 'Series', width: '80px' },
-    { key: 'actions', label: '', width: '50px', align: 'center' },
+    { key: 'invoice', label: 'Invoice #', sortable: true, width: '130px' },
+    { key: 'customer', label: 'Customer', sortable: true, width: '180px' },
+    { key: 'customerTaxCode', label: 'Tax Code', sortable: true, width: '130px' },
+    { key: 'amount', label: 'Amount', sortable: true, align: 'right', width: '130px' },
+    { key: 'taxAmount', label: 'Tax Amount', sortable: true, align: 'right', width: '130px' },
+    { key: 'status', label: 'Status', width: '120px', align: 'center' },
+    { key: 'date', label: 'Date', sortable: true, width: '130px' },
+    { key: 'series', label: 'Series', width: '100px' },
+    { key: 'actions', label: '', width: '80px', align: 'center' },
   ];
 
-  const mockInvoices = [
-    {
-      id: '1',
-      invoice: 'INV-2024-001',
-      customer: 'Acme Corporation',
-      amount: '$2,500.00',
-      status: <ZenStatusChip status="paid" size="sm" />,
-      date: '2024-01-15',
-      series: 'A',
-      actions: <ActionDropdown invoiceId="1" />,
-    },
-    {
-      id: '2',
-      invoice: 'INV-2024-002',
-      customer: 'Tech Solutions Ltd',
-      amount: '$1,750.00',
-      status: <ZenStatusChip status="pending" size="sm" />,
-      date: '2024-01-14',
-      series: 'A',
-      actions: <ActionDropdown invoiceId="2" />,
-    },
-    {
-      id: '3',
-      invoice: 'INV-2024-003',
-      customer: 'Digital Marketing Agency',
-      amount: '$3,200.00',
-      status: <ZenStatusChip status="overdue" size="sm" />,
-      date: '2024-01-10',
-      series: 'B',
-      actions: <ActionDropdown invoiceId="3" />,
-    },
-    {
-      id: '4',
-      invoice: 'INV-2024-004',
-      customer: 'Startup Innovations Inc',
-      amount: '$890.00',
-      status: <ZenStatusChip status="draft" size="sm" />,
-      date: '2024-01-16',
-      series: 'A',
-      actions: <ActionDropdown invoiceId="4" />,
-    },
-    {
-      id: '5',
-      invoice: 'INV-2024-005',
-      customer: 'Enterprise Solutions Co',
-      amount: '$5,500.00',
-      status: <ZenStatusChip status="sent" size="sm" />,
-      date: '2024-01-12',
-      series: 'C',
-      actions: <ActionDropdown invoiceId="5" />,
-    },
-    {
-      id: '6',
-      invoice: 'INV-2024-006',
-      customer: 'Global Services LLC',
-      amount: '$1,200.00',
-      status: <ZenStatusChip status="failed" size="sm" />,
-      date: '2024-01-11',
-      series: 'A',
-      actions: <ActionDropdown invoiceId="6" />,
-    },
-  ];
+  // Transform API data to grid format
+  const invoiceData = useMemo(() => {
+    if (!apiResponse?.data?.data) return [];
+
+    return apiResponse.data.data.map((invoice) => ({
+      id: invoice.id,
+      invoice: invoice.invoiceNumber || invoice.invoiceId || '-',
+      customer: invoice.customerName || '-',
+      customerTaxCode: invoice.customerTaxCode || '-',
+      amount: formatCurrency(invoice.totalAmount),
+      taxAmount: formatCurrency(invoice.taxAmount),
+      status: <ZenStatusChip status={mapStatus(invoice.invoiceStatus)} size="sm" />,
+      date: formatDate(invoice.invoiceDate),
+      series: invoice.invoiceSeries || '-',
+      actions: <ActionDropdown invoiceId={invoice.id} />,
+    }));
+  }, [apiResponse?.data, formatCurrency, formatDate, mapStatus]);
 
   const handleRowSelect = (rowId: string) => {
     setSelectedRows(prev => 
@@ -161,7 +143,7 @@ export const InvoiceList: React.FC<{
   };
 
   const handleSelectAll = (selected: boolean) => {
-    setSelectedRows(selected ? mockInvoices.map(invoice => invoice.id) : []);
+    setSelectedRows(selected ? invoiceData.map(invoice => invoice.id) : []);
   };
 
   return (
@@ -170,7 +152,12 @@ export const InvoiceList: React.FC<{
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-[#1F2937]">Invoices</h1>
-          <p className="text-[#6B7280] mt-1">Manage and track all your e-invoices</p>
+          <p className="text-[#6B7280] mt-1">
+            Manage and track all your e-invoices
+            {apiResponse?.data?.total !== undefined && (
+              <span className="ml-2 text-sm">({apiResponse.data.total} total)</span>
+            )}
+          </p>
         </div>
         <ZenButton onClick={onCreateInvoice}>
           <PlusIcon className="h-4 w-4" />
@@ -185,10 +172,17 @@ export const InvoiceList: React.FC<{
           <div className="flex flex-col sm:flex-row gap-3 flex-1">
             <div className="flex-1 max-w-md">
               <ZenSearchField
-                placeholder="Search invoices..."
+                placeholder="Search by invoice ID or customer name..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onClear={() => setSearchQuery('')}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  // Reset to first page when searching
+                  setCurrentPage(1);
+                }}
+                onClear={() => {
+                  setSearchQuery('');
+                  setCurrentPage(1);
+                }}
               />
             </div>
             
@@ -228,26 +222,59 @@ export const InvoiceList: React.FC<{
         </div>
       </div>
 
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <LoaderIcon className="h-8 w-8 animate-spin text-[#6B7280]" />
+          <span className="ml-2 text-[#6B7280]">Loading invoices...</span>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-800">
+            Failed to load invoices. Please try again.
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="mt-2 text-red-600 hover:text-red-800 underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Data Grid */}
-      <ZenDataGrid
-        columns={columns}
-        data={mockInvoices}
-        selectedRows={selectedRows}
-        onRowSelect={handleRowSelect}
-        onSelectAll={handleSelectAll}
-        sortField={sortField}
-        sortDirection={sortDirection}
-        onSort={(field, direction) => {
-          setSortField(field);
-          setSortDirection(direction);
-        }}
-        currentPage={currentPage}
-        totalPages={5}
-        totalItems={50}
-        itemsPerPage={10}
-        onPageChange={setCurrentPage}
-        onRowClick={(row) => onViewInvoice ? onViewInvoice() : console.log('View invoice:', row.invoice)}
-      />
+      {!isLoading && !error && (
+        <ZenDataGrid
+          columns={columns}
+          data={invoiceData}
+          selectedRows={selectedRows}
+          onRowSelect={handleRowSelect}
+          onSelectAll={handleSelectAll}
+          sortField={sortField}
+          sortDirection={sortDirection}
+          onSort={(field, direction) => {
+            setSortField(field);
+            setSortDirection(direction);
+          }}
+          currentPage={currentPage}
+          totalPages={Math.ceil((apiResponse?.data?.total || 0) / pageSize)}
+          totalItems={apiResponse?.data?.total || 0}
+          itemsPerPage={pageSize}
+          onPageChange={setCurrentPage}
+          onRowClick={(row) => {
+            // Find the original invoice data from API response
+            const invoice = apiResponse?.data?.data?.find(inv => inv.id === row.id);
+            if (invoice && onViewInvoice) {
+              onViewInvoice(invoice);
+            } else {
+              console.log('View invoice:', row);
+            }
+          }}
+        />
+      )}
 
       {/* Advanced Filters Drawer */}
       <ZenDrawer

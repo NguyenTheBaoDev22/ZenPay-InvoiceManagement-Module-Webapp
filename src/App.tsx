@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
+import { queryClient } from './infrastructure/api/queryClient';
 import { ZenNavigation } from './components/zenshop/ZenNavigation';
-import { ZenWizard } from './components/zenshop/ZenWizard';
+import { InvoiceWizard } from './presentation/components/invoice-wizard/InvoiceWizard';
 import { ZenAIAssistant } from './components/zenshop/ZenAIAssistant';
 import { InvoiceDashboard } from './components/screens/InvoiceDashboard';
 import { InvoiceList } from './components/screens/InvoiceList';
@@ -8,24 +11,52 @@ import { InvoiceDetail } from './components/screens/InvoiceDetail';
 import { ResourceCenterPage } from './components/screens/ResourceCenterPage';
 import { Settings } from './components/screens/Settings';
 import { Logs } from './components/screens/Logs';
+import { Login } from './components/screens/Login';
+import { Quotas } from './components/screens/Quotas';
+import { InvoiceListItem } from './core/entities/Invoice';
+import { useRequireAuth } from './presentation/hooks/useAuth';
 
 export default function App() {
+  const { isAuthenticated, shouldShowLogin } = useRequireAuth();
   const [currentView, setCurrentView] = useState('dashboard');
   const [showInvoiceDetail, setShowInvoiceDetail] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceListItem | null>(null);
   const [showInvoiceWizard, setShowInvoiceWizard] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
+
+  const handleLoginSuccess = () => {
+    // After successful login, user will see the main app
+    console.log('Login successful, redirecting to dashboard');
+  };
 
   const handleNavigate = (viewId: string) => {
     setCurrentView(viewId);
     setShowInvoiceDetail(false);
   };
 
-  const handleShowInvoiceDetail = () => {
+  // ✅ Listen for navigation events from CheckoutModal
+  useEffect(() => {
+    const handleNavigateToQuotas = () => {
+      console.log('🎯 Navigating to quotas page after successful payment');
+      setCurrentView('quotas');
+      setShowInvoiceDetail(false);
+    };
+
+    window.addEventListener('navigate-to-quotas', handleNavigateToQuotas);
+
+    return () => {
+      window.removeEventListener('navigate-to-quotas', handleNavigateToQuotas);
+    };
+  }, []);
+
+  const handleShowInvoiceDetail = (invoice: InvoiceListItem) => {
+    setSelectedInvoice(invoice);
     setShowInvoiceDetail(true);
   };
 
   const handleBackFromDetail = () => {
     setShowInvoiceDetail(false);
+    setSelectedInvoice(null);
   };
 
   const handleOpenInvoiceWizard = () => {
@@ -78,8 +109,8 @@ export default function App() {
   };
 
   const renderCurrentView = () => {
-    if (showInvoiceDetail) {
-      return <InvoiceDetail onBack={handleBackFromDetail} />;
+    if (showInvoiceDetail && selectedInvoice) {
+      return <InvoiceDetail invoice={selectedInvoice} onBack={handleBackFromDetail} />;
     }
 
     switch (currentView) {
@@ -94,6 +125,8 @@ export default function App() {
         );
       case 'quota':
         return <ResourceCenterPage onNavigate={handleNavigate} />;
+      case 'quotas':
+        return <Quotas />;
       case 'settings':
         return <Settings />;
       case 'logs':
@@ -110,32 +143,45 @@ export default function App() {
     }
   };
 
+  // Show login screen if not authenticated
+  if (shouldShowLogin) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Login onLoginSuccess={handleLoginSuccess} />
+        <Toaster position="top-right" richColors />
+      </QueryClientProvider>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
-      {!showInvoiceDetail && (
-        <ZenNavigation 
-          currentView={currentView} 
-          onNavigate={handleNavigate} 
+    <QueryClientProvider client={queryClient}>
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
+        {!showInvoiceDetail && (
+          <ZenNavigation
+            currentView={currentView}
+            onNavigate={handleNavigate}
+          />
+        )}
+
+        <main className="flex-1">
+          {renderCurrentView()}
+        </main>
+
+        {/* Invoice Wizard Modal */}
+        <InvoiceWizard
+          isOpen={showInvoiceWizard}
+          onClose={handleCloseInvoiceWizard}
+          onComplete={handleWizardComplete}
         />
-      )}
-      
-      <main className="flex-1">
-        {renderCurrentView()}
-      </main>
 
-      {/* Invoice Wizard Modal */}
-      <ZenWizard
-        isOpen={showInvoiceWizard}
-        onClose={handleCloseInvoiceWizard}
-        onComplete={handleWizardComplete}
-      />
-
-      {/* AI Assistant */}
-      <ZenAIAssistant
-        context={currentView as any}
-        suggestions={getContextualSuggestions()}
-        onAcceptSuggestion={handleAISuggestion}
-      />
-    </div>
+        {/* AI Assistant */}
+        <ZenAIAssistant
+          context={currentView as any}
+          suggestions={getContextualSuggestions()}
+          onAcceptSuggestion={handleAISuggestion}
+        />
+      </div>
+      <Toaster position="top-right" richColors />
+    </QueryClientProvider>
   );
 }

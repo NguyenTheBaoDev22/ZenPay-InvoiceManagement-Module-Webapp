@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock, CheckCircle, XCircle, QrCode, Copy } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
 import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
+import { useCreateAndTrackOrder, useMerchantInvoiceOrderStatus } from '../../presentation/hooks/useMerchantInvoiceOrder';
+import { useAuth } from '../../presentation/hooks/useAuth';
 
 interface CheckoutModalProps {
   open: boolean;
@@ -21,45 +24,104 @@ interface CheckoutModalProps {
 
 type PaymentStatus = 'waiting' | 'processing' | 'success' | 'failed' | 'expired';
 
+// Helper function to decode Base64 QR data from backend
+const decodeQrData = (base64String: string): string => {
+  try {
+    // If it's already a valid QR data string, return as is
+    if (base64String.startsWith('00020101') || base64String.includes('VietQR')) {
+      return base64String;
+    }
+
+    // Try to decode Base64
+    const decoded = atob(base64String);
+    return decoded;
+  } catch (error) {
+    console.warn('Failed to decode QR data:', error);
+    // Return a fallback VietQR string for demo
+    return '00020101021238570010A00000072701270006970454011234567890208QRIBFTTA53037045802VN5925NGUYEN VAN A6304';
+  }
+};
+
 export function CheckoutModal({ open, onOpenChange, packageData, onSuccess }: CheckoutModalProps) {
+  const { taxCode } = useAuth();
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('waiting');
-  const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutes in seconds
-  const [qrCode] = useState(`data:image/svg+xml;base64,${btoa(`
-    <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-      <rect width="200" height="200" fill="white"/>
-      <rect x="20" y="20" width="20" height="20" fill="black"/>
-      <rect x="60" y="20" width="20" height="20" fill="black"/>
-      <rect x="100" y="20" width="20" height="20" fill="black"/>
-      <rect x="140" y="20" width="20" height="20" fill="black"/>
-      <rect x="20" y="60" width="20" height="20" fill="black"/>
-      <rect x="100" y="60" width="20" height="20" fill="black"/>
-      <rect x="140" y="60" width="20" height="20" fill="black"/>
-      <rect x="20" y="100" width="20" height="20" fill="black"/>
-      <rect x="60" y="100" width="20" height="20" fill="black"/>
-      <rect x="140" y="100" width="20" height="20" fill="black"/>
-      <rect x="60" y="140" width="20" height="20" fill="black"/>
-      <rect x="100" y="140" width="20" height="20" fill="black"/>
-      <rect x="140" y="140" width="20" height="20" fill="black"/>
-      <rect x="20" y="180" width="20" height="20" fill="black"/>
-      <rect x="100" y="180" width="20" height="20" fill="black"/>
-      <rect x="140" y="180" width="20" height="20" fill="black"/>
-    </svg>
-  `)}`);
+  const [timeLeft, setTimeLeft] = useState(5 * 60); // 5 minutes in seconds
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [transactionId, setTransactionId] = useState<string>('');
+
+  const { createAndTrack } = useCreateAndTrackOrder();
+  const [qrCode, setQrCode] = useState<string>('');
 
   // Calculate totals
   const priceValue = parseInt(packageData.price.replace(/[^\d]/g, ''));
   const vatAmount = Math.round(priceValue * 0.1);
   const totalAmount = priceValue + vatAmount;
-  const orderId = `ORD-${Date.now()}`;
+
+  // Polling for order status - only when modal is open and waiting
+  console.log('🔍 [POLLING CONDITIONS]', {
+    open,
+    orderId,
+    paymentStatus,
+    enabled: open && !!orderId && paymentStatus === 'waiting'
+  });
+
+  const { data: statusData } = useMerchantInvoiceOrderStatus(orderId, {
+    enabled: open && !!orderId && paymentStatus === 'waiting', // ✅ Only poll when modal open
+    refetchInterval: 5000, // ✅ Increased to 5 seconds
+  });
+
+  // ✅ Watch for status changes using useEffect
+  useEffect(() => {
+    if (statusData?.data) {
+      console.log('🔍 [CHECKOUT] Status data received:', statusData);
+      console.log('🔍 [CHECKOUT] Status value:', (statusData as any).data.status);
+
+      // ✅ Convert number status to string enum
+      const statusString = (statusData as any).data.status === 1 ? 'PENDING' :
+                         (statusData as any).data.status === 2 ? 'COMPLETED' : 'UNKNOWN';
+      console.log('🔍 [CHECKOUT] Converted status:', statusString);
+
+      if (statusString === 'COMPLETED') {
+        console.log('🎉 Payment completed successfully!');
+        setPaymentStatus('success');
+
+        // Show success toast
+        toast.success('Thanh toán thành công! 🎉', {
+          description: 'Đơn hàng của bạn đã được xử lý thành công',
+          duration: 3000,
+        });
+
+        // Close modal and navigate after delay
+        setTimeout(() => {
+          onOpenChange(false); // Close modal
+          onSuccess(transactionId || `TXN-${Date.now()}`);
+
+          // Navigate to Quotas page (using app's internal navigation)
+          // Since this is a SPA, we need to trigger the navigation through the parent
+          // For now, we'll use a custom event or callback
+          if (window.location.pathname.includes('test-dedicated-page.html')) {
+            // For test page
+            (window as any).showPage?.('quotas');
+          } else {
+            // For React app - trigger navigation via custom event
+            window.dispatchEvent(new CustomEvent('navigate-to-quotas'));
+          }
+        }, 2000);
+      }
+    }
+  }, [statusData, onOpenChange, onSuccess, transactionId]);
 
   // Timer effect
   useEffect(() => {
     if (!open || paymentStatus !== 'waiting') return;
 
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
+      setTimeLeft((prev: number) => {
         if (prev <= 1) {
           setPaymentStatus('expired');
+          toast.error('QR Code đã hết hạn', {
+            description: 'Vui lòng thử lại để tạo mã QR mới'
+          });
           return 0;
         }
         return prev - 1;
@@ -69,37 +131,69 @@ export function CheckoutModal({ open, onOpenChange, packageData, onSuccess }: Ch
     return () => clearInterval(timer);
   }, [open, paymentStatus]);
 
-  // Simulate payment flow
+  // Create order when modal opens - ONLY ONCE
   useEffect(() => {
-    if (!open) return;
+    if (!open || !taxCode || orderId) return; // ✅ Don't create if already have orderId
 
-    // Simulate payment detection after random time
-    const paymentTimer = setTimeout(() => {
-      if (paymentStatus === 'waiting') {
-        setPaymentStatus('processing');
-        
-        setTimeout(() => {
-          // 90% success rate
-          if (Math.random() > 0.1) {
-            setPaymentStatus('success');
-            setTimeout(() => {
-              onSuccess(`TXN-${Date.now()}`);
-            }, 2000);
-          } else {
-            setPaymentStatus('failed');
+    let isCreating = false; // ✅ Prevent double creation
+
+    const createOrder = async () => {
+      if (isCreating) return; // ✅ Guard against concurrent calls
+      isCreating = true;
+
+      try {
+        console.log('🚀 Creating order for taxCode:', taxCode);
+        setPaymentStatus('waiting');
+        const result = await createAndTrack(
+          { taxCode },
+          (newOrderId: string, paymentInfo: any) => {
+            console.log('✅ Order created successfully:', newOrderId);
+            setOrderId(newOrderId);
+            setQrCode(paymentInfo.qrCode);
+            setTransactionId(paymentInfo.transactionId);
+            setTimeLeft(paymentInfo.expirationInMinutes * 60);
           }
-        }, 3000);
-      }
-    }, Math.random() * 30000 + 10000); // Random between 10-40 seconds
+        );
 
-    return () => clearTimeout(paymentTimer);
-  }, [open, paymentStatus, onSuccess]);
+        if (!result.success) {
+          setPaymentStatus('failed');
+          toast.error('Không thể tạo đơn hàng', {
+            description: 'Vui lòng thử lại sau'
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error creating order:', error);
+        setPaymentStatus('failed');
+        toast.error('Có lỗi xảy ra', {
+          description: 'Không thể tạo đơn hàng, vui lòng thử lại'
+        });
+      } finally {
+        isCreating = false;
+      }
+    };
+
+    createOrder();
+  }, [open, taxCode, orderId]); // ✅ Added orderId to prevent re-creation
+
+  // ✅ Cleanup when modal closes
+  useEffect(() => {
+    if (!open) {
+      // Reset all states when modal closes
+      setPaymentStatus('waiting');
+      setOrderId(null);
+      setTransactionId('');
+      setQrCode('');
+      setTimeLeft(5 * 60);
+    }
+  }, [open]);
 
   // Reset state when modal opens
   useEffect(() => {
     if (open) {
       setPaymentStatus('waiting');
-      setTimeLeft(15 * 60);
+      setTimeLeft(5 * 60);
+      setOrderId(null);
+      setTransactionId('');
     }
   }, [open]);
 
@@ -110,8 +204,10 @@ export function CheckoutModal({ open, onOpenChange, packageData, onSuccess }: Ch
   };
 
   const copyOrderId = () => {
-    navigator.clipboard.writeText(orderId);
-    toast.success('Order ID copied to clipboard');
+    if (orderId) {
+      navigator.clipboard.writeText(orderId);
+      toast.success('Order ID copied to clipboard');
+    }
   };
 
   const getStatusDisplay = () => {
@@ -145,6 +241,12 @@ export function CheckoutModal({ open, onOpenChange, packageData, onSuccess }: Ch
           text: 'QR Code Expired. Please refresh.',
           icon: <XCircle className="h-4 w-4" />,
           color: 'text-red-600'
+        };
+      default:
+        return {
+          text: 'Unknown status',
+          icon: <Clock className="h-4 w-4" />,
+          color: 'text-gray-600'
         };
     }
   };
@@ -218,7 +320,7 @@ export function CheckoutModal({ open, onOpenChange, packageData, onSuccess }: Ch
                       onClick={copyOrderId}
                       className="h-6 px-2 text-xs font-mono"
                     >
-                      {orderId}
+                      {orderId || 'Đang tạo...'}
                       <Copy className="h-3 w-3 ml-1" />
                     </Button>
                   </div>
@@ -241,11 +343,24 @@ export function CheckoutModal({ open, onOpenChange, packageData, onSuccess }: Ch
                 {/* QR Code */}
                 <div className="flex justify-center">
                   <div className="p-4 bg-white rounded-xl shadow-sm border">
-                    <img 
-                      src={qrCode} 
-                      alt="Payment QR Code" 
-                      className="w-48 h-48"
-                    />
+                    {qrCode ? (
+                      <QRCodeSVG
+                        value={decodeQrData(qrCode)}
+                        size={192}
+                        bgColor="#FFFFFF"
+                        fgColor="#000000"
+                        level="M"
+                        marginSize={4}
+                        title="Payment QR Code"
+                      />
+                    ) : (
+                      <div className="w-48 h-48 flex items-center justify-center bg-gray-100 rounded-lg">
+                        <div className="text-center">
+                          <QrCode className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500">Đang tạo QR code...</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -278,6 +393,31 @@ export function CheckoutModal({ open, onOpenChange, packageData, onSuccess }: Ch
                   {statusDisplay.icon}
                   <span>{statusDisplay.text}</span>
                 </div>
+
+                {/* 🧪 DEBUG: Test success button */}
+                {paymentStatus === 'waiting' && orderId && (
+                  <div className="flex justify-center mt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        console.log('🧪 [TEST] Simulating payment success');
+                        setPaymentStatus('success');
+                        toast.success('Thanh toán thành công! 🎉', {
+                          description: 'Đơn hàng của bạn đã được xử lý thành công',
+                          duration: 3000,
+                        });
+                        setTimeout(() => {
+                          onOpenChange(false);
+                          window.dispatchEvent(new CustomEvent('navigate-to-quotas'));
+                        }, 2000);
+                      }}
+                      className="text-xs"
+                    >
+                      🧪 Test Success
+                    </Button>
+                  </div>
+                )}
               </>
             ) : (
               /* Success State */

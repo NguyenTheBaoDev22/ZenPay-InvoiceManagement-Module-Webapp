@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { ZenButton } from '../zenshop/ZenButton';
 import { ZenStatusChip } from '../zenshop/ZenStatusChip';
+import { CheckoutModal } from '../purchase/CheckoutModal';
 import { motion } from 'motion/react';
-import { 
-  ZapIcon, 
-  StarIcon, 
+import {
+  ZapIcon,
+  StarIcon,
   CrownIcon,
-  CheckIcon,
-  XIcon,
-  QrCodeIcon,
-  Loader2Icon,
-  CheckCircleIcon
+  CheckIcon
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface QuotaPackage {
   id: string;
@@ -77,28 +75,25 @@ const packages: QuotaPackage[] = [
 
 export const BuyQuota: React.FC = () => {
   const [selectedPackage, setSelectedPackage] = useState<QuotaPackage | null>(null);
-  const [showPayment, setShowPayment] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success'>('pending');
+  const [showCheckout, setShowCheckout] = useState(false);
 
   const handleSelectPackage = (pkg: QuotaPackage) => {
     setSelectedPackage(pkg);
-    setShowPayment(true);
+    setShowCheckout(true);
   };
 
-  const handleClosePayment = () => {
-    setShowPayment(false);
-    setPaymentStatus('pending');
+  const handleCheckoutSuccess = (transactionId: string) => {
+    toast.success('Thanh toán thành công!', {
+      description: `Giao dịch: ${transactionId}`
+    });
+    setShowCheckout(false);
+    setSelectedPackage(null);
   };
 
-  // Simulate payment success after 3 seconds
-  React.useEffect(() => {
-    if (showPayment && paymentStatus === 'pending') {
-      const timer = setTimeout(() => {
-        setPaymentStatus('success');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [showPayment, paymentStatus]);
+  const handleCheckoutClose = () => {
+    setShowCheckout(false);
+    setSelectedPackage(null);
+  };
 
   return (
     <div className="p-8">
@@ -197,112 +192,21 @@ export const BuyQuota: React.FC = () => {
         ))}
       </div>
 
-      {/* Payment Modal */}
-      {showPayment && selectedPackage && (
-        <PaymentModal
-          package={selectedPackage}
-          status={paymentStatus}
-          onClose={handleClosePayment}
+      {/* Checkout Modal */}
+      {selectedPackage && (
+        <CheckoutModal
+          open={showCheckout}
+          onOpenChange={setShowCheckout}
+          packageData={{
+            provider: 'ZenShop',
+            packageName: selectedPackage.name,
+            price: `${selectedPackage.price.toLocaleString('vi-VN')} VND`,
+            type: 'quota'
+          }}
+          onSuccess={handleCheckoutSuccess}
         />
       )}
     </div>
   );
 };
 
-interface PaymentModalProps {
-  package: QuotaPackage;
-  status: 'pending' | 'success';
-  onClose: () => void;
-}
-
-const PaymentModal: React.FC<PaymentModalProps> = ({ package: pkg, status, onClose }) => {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg"
-      >
-        {/* Header */}
-        <div className="border-b border-[#E5E7EB] px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-[#1F2937]">Complete Your Purchase</h3>
-            <button
-              onClick={onClose}
-              className="p-1 text-[#6B7280] hover:text-[#374151] rounded"
-            >
-              <XIcon className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6">
-          {/* Order Summary */}
-          <div className="bg-[#F8FAFC] p-4 rounded-lg mb-6">
-            <h4 className="font-medium text-[#1F2937] mb-3">Order Summary</h4>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[#6B7280]">{pkg.name} Package</span>
-              <span className="font-medium text-[#1F2937]">${pkg.price}</span>
-            </div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[#6B7280]">Invoices Included</span>
-              <span className="font-medium text-[#1F2937]">{pkg.invoices}</span>
-            </div>
-            <div className="border-t border-[#E5E7EB] pt-2 mt-2">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-[#1F2937]">Total</span>
-                <span className="text-xl font-bold text-[#1F2937]">${pkg.price}</span>
-              </div>
-            </div>
-          </div>
-
-          {status === 'pending' ? (
-            /* QR Code Payment */
-            <div className="text-center">
-              <div className="mb-4">
-                <QrCodeIcon className="h-32 w-32 text-[#1F2937] mx-auto mb-4" />
-                <p className="font-medium text-[#1F2937] mb-2">Scan to Pay</p>
-                <p className="text-sm text-[#6B7280]">
-                  Use your banking app or payment wallet to scan the QR code above
-                </p>
-              </div>
-
-              {/* Status Indicator */}
-              <div className="flex items-center justify-center gap-2 p-3 bg-[#F59E0B]/10 rounded-lg">
-                <Loader2Icon className="h-4 w-4 text-[#F59E0B] animate-spin" />
-                <span className="text-sm font-medium text-[#F59E0B]">Waiting for Payment...</span>
-              </div>
-
-              <p className="text-xs text-[#6B7280] mt-3">
-                Payment typically processes within 30 seconds
-              </p>
-            </div>
-          ) : (
-            /* Success State */
-            <div className="text-center">
-              <div className="w-16 h-16 bg-[#22C55E]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircleIcon className="h-8 w-8 text-[#22C55E]" />
-              </div>
-              <h4 className="text-lg font-semibold text-[#1F2937] mb-2">Payment Successful!</h4>
-              <p className="text-[#6B7280] mb-6">
-                Your {pkg.name} package has been activated. You can now issue up to {pkg.invoices} invoices.
-              </p>
-              
-              <div className="bg-[#22C55E]/10 p-4 rounded-lg mb-6">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#6B7280]">New Quota Balance:</span>
-                  <span className="font-medium text-[#22C55E]">{pkg.invoices} invoices</span>
-                </div>
-              </div>
-
-              <ZenButton onClick={onClose} className="w-full">
-                Continue to Dashboard
-              </ZenButton>
-            </div>
-          )}
-        </div>
-      </motion.div>
-    </div>
-  );
-};
