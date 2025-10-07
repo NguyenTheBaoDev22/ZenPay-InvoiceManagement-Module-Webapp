@@ -6,9 +6,10 @@ import { useInvoiceWizard } from '../../../hooks/useInvoiceWizard';
 
 interface ResultStepProps {
   onComplete: () => void;
+  onViewInvoice?: (invoiceData: any) => void;
 }
 
-export const ResultStep: React.FC<ResultStepProps> = ({ onComplete }) => {
+export const ResultStep: React.FC<ResultStepProps> = ({ onComplete, onViewInvoice }) => {
   const { result, reset, issueOption } = useInvoiceWizard();
 
   const getStatusChipStatus = React.useCallback((status: string) => {
@@ -30,6 +31,31 @@ export const ResultStep: React.FC<ResultStepProps> = ({ onComplete }) => {
     reset();
     onComplete();
   }, [reset, onComplete]);
+
+  const handleViewInvoice = React.useCallback(() => {
+    if (result?.response?.data?.data?.[0]?.data && onViewInvoice) {
+      // Transform the result data to match InvoiceListItem format
+      const invoiceData = result.response.data.data[0].data;
+      const transformedInvoice = {
+        id: invoiceData.id,
+        invoiceId: invoiceData.id,
+        invoiceNumber: invoiceData.shdon || result.invoiceNumber,
+        customerName: invoiceData.tnmua || 'N/A',
+        customerTaxCode: invoiceData.mst || 'N/A',
+        totalAmount: result.amount || invoiceData.tgtttbso || 0,
+        taxAmount: invoiceData.tgtthue || 0,
+        invoiceStatus: invoiceData.tthai || result.status || 'draft',
+        invoiceDate: invoiceData.tdlap || invoiceData.nlap || new Date().toISOString(),
+        invoiceSeries: invoiceData.khieu || 'N/A',
+        // Add other required fields with fallbacks
+        merchantBranchId: 'eb7be434-7e2c-4f0b-a7f6-cdb73970a912',
+        taxCode: '0123456789',
+      };
+
+      onViewInvoice(transformedInvoice);
+      onComplete(); // Close the wizard
+    }
+  }, [result, onViewInvoice, onComplete]);
 
   if (!result) {
     return (
@@ -128,7 +154,12 @@ export const ResultStep: React.FC<ResultStepProps> = ({ onComplete }) => {
 
       {/* Action Buttons */}
       <div className="flex gap-3 justify-center flex-wrap">
-        <ZenButton variant="secondary" className="gap-2">
+        <ZenButton
+          variant="secondary"
+          className="gap-2"
+          onClick={handleViewInvoice}
+          disabled={!result?.response?.data?.data?.[0]?.data}
+        >
           <EyeIcon className="h-4 w-4" />
           View Invoice
         </ZenButton>

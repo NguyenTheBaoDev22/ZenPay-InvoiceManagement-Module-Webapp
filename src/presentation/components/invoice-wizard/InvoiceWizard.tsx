@@ -20,6 +20,7 @@ interface InvoiceWizardProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete?: () => void;
+  onViewInvoice?: (invoiceData: any) => void;
 }
 
 interface WizardStep {
@@ -62,7 +63,7 @@ const steps: WizardStep[] = [
   }
 ];
 
-export const InvoiceWizard: React.FC<InvoiceWizardProps> = ({ isOpen, onClose, onComplete }) => {
+export const InvoiceWizard: React.FC<InvoiceWizardProps> = ({ isOpen, onClose, onComplete, onViewInvoice }) => {
   const [currentStep, setCurrentStep] = useState(0);
 
   const handleNext = React.useCallback(() => {
@@ -106,7 +107,7 @@ export const InvoiceWizard: React.FC<InvoiceWizardProps> = ({ isOpen, onClose, o
       case 3:
         return <SignIssueStep onComplete={handleStepComplete} />;
       case 4:
-        return <ResultStep onComplete={handleStepComplete} />;
+        return <ResultStep onComplete={handleStepComplete} onViewInvoice={onViewInvoice} />;
       default:
         return null;
     }

@@ -57,6 +57,17 @@ export const InvoiceList: React.FC<{
   const ActionDropdown = ({ invoiceId }: { invoiceId: string }) => {
     const [isOpen, setIsOpen] = useState(false);
 
+    const handleViewDetails = () => {
+      // Find the invoice data from API response
+      const invoice = apiResponse?.data?.data?.find(inv => inv.id === invoiceId);
+      if (invoice && onViewInvoice) {
+        onViewInvoice(invoice);
+      } else {
+        console.log('View invoice details:', invoiceId);
+      }
+      setIsOpen(false);
+    };
+
     return (
       <div className="relative">
         <button
@@ -65,16 +76,19 @@ export const InvoiceList: React.FC<{
         >
           <MoreHorizontalIcon className="h-4 w-4" />
         </button>
-        
+
         {isOpen && (
           <>
-            <div 
-              className="fixed inset-0 z-10" 
+            <div
+              className="fixed inset-0 z-10"
               onClick={() => setIsOpen(false)}
             />
             <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-[#E5E7EB] rounded-lg shadow-lg z-20">
               <div className="py-1">
-                <button className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#F9FAFB] flex items-center gap-2">
+                <button
+                  onClick={handleViewDetails}
+                  className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#F9FAFB] flex items-center gap-2"
+                >
                   <EyeIcon className="h-4 w-4" />
                   View Details
                 </button>
@@ -105,14 +119,14 @@ export const InvoiceList: React.FC<{
 
   // Transform API data for DataGrid
   const columns: ZenColumn[] = [
-    { key: 'invoice', label: 'Invoice #', sortable: true, width: '130px' },
-    { key: 'customer', label: 'Customer', sortable: true, width: '180px' },
-    { key: 'customerTaxCode', label: 'Tax Code', sortable: true, width: '130px' },
+    { key: 'invoice', label: 'Invoice #', sortable: true, width: '130px', align: 'left' },
+    { key: 'customer', label: 'Customer', sortable: true, width: '180px', align: 'left' },
+    { key: 'customerTaxCode', label: 'Tax Code', sortable: true, width: '130px', align: 'left' },
     { key: 'amount', label: 'Amount', sortable: true, align: 'right', width: '130px' },
     { key: 'taxAmount', label: 'Tax Amount', sortable: true, align: 'right', width: '130px' },
     { key: 'status', label: 'Status', width: '120px', align: 'center' },
-    { key: 'date', label: 'Date', sortable: true, width: '130px' },
-    { key: 'series', label: 'Series', width: '100px' },
+    { key: 'date', label: 'Date', sortable: true, width: '130px', align: 'left' },
+    { key: 'series', label: 'Series', width: '100px', align: 'left' },
     { key: 'actions', label: '', width: '80px', align: 'center' },
   ];
 
@@ -125,12 +139,28 @@ export const InvoiceList: React.FC<{
       invoice: invoice.invoiceNumber || invoice.invoiceId || '-',
       customer: invoice.customerName || '-',
       customerTaxCode: invoice.customerTaxCode || '-',
-      amount: formatCurrency(invoice.totalAmount),
-      taxAmount: formatCurrency(invoice.taxAmount),
-      status: <ZenStatusChip status={mapStatus(invoice.invoiceStatus)} size="sm" />,
+      amount: (
+        <div className="text-right">
+          {formatCurrency(invoice.totalAmount)}
+        </div>
+      ),
+      taxAmount: (
+        <div className="text-right">
+          {formatCurrency(invoice.taxAmount)}
+        </div>
+      ),
+      status: (
+        <div className="flex justify-center">
+          <ZenStatusChip status={mapStatus(invoice.invoiceStatus)} size="sm" />
+        </div>
+      ),
       date: formatDate(invoice.invoiceDate),
       series: invoice.invoiceSeries || '-',
-      actions: <ActionDropdown invoiceId={invoice.id} />,
+      actions: (
+        <div className="flex justify-center">
+          <ActionDropdown invoiceId={invoice.id} />
+        </div>
+      ),
     }));
   }, [apiResponse?.data, formatCurrency, formatDate, mapStatus]);
 

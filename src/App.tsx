@@ -72,6 +72,15 @@ export default function App() {
     // Handle the completed invoice data
   };
 
+  const handleWizardViewInvoice = (invoiceData: InvoiceListItem) => {
+    console.log('View invoice from wizard:', invoiceData);
+    // Set the invoice data and show detail view
+    setSelectedInvoice(invoiceData);
+    setShowInvoiceDetail(true);
+    // Close the wizard
+    setShowInvoiceWizard(false);
+  };
+
   const handleAISuggestion = (suggestion: any) => {
     console.log('AI suggestion accepted:', suggestion);
     
@@ -171,7 +180,8 @@ export default function App() {
         <InvoiceWizard
           isOpen={showInvoiceWizard}
           onClose={handleCloseInvoiceWizard}
-          onComplete={handleWizardComplete}
+          onComplete={() => handleWizardComplete({})}
+          onViewInvoice={handleWizardViewInvoice}
         />
 
         {/* AI Assistant */}
